@@ -1,9 +1,16 @@
-from typing import Any
+import json
+from typing import Any, Optional, Tuple
+
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from geopy.geocoders import Nominatim  # type: ignore
+
+NO_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/No-image-available.png/480px-No-image-available.png"  # noqa: E501
 
 
 # Get the HTML content of a Wikipedia page
 def get_content_wikipedia(url: str) -> str:
-    import requests
 
     print("Getting content from Wikipedia page ... ", url)
     try:
@@ -18,9 +25,6 @@ def get_content_wikipedia(url: str) -> str:
 
 # Get the list of Football stadiums by capacity in the wikipedia page
 def get_data_wikipedia(html: str) -> list[Any]:
-    from typing import Any
-
-    from bs4 import BeautifulSoup
 
     print("Extracting data from Wikipedia page ...")
     soup = BeautifulSoup(html, "html.parser")
@@ -29,10 +33,19 @@ def get_data_wikipedia(html: str) -> list[Any]:
     return rows
 
 
-# Extract data from the Wikipedia page
-def extract_wikipedia_page(**kwargs: Any) -> list[Any]:
+# Clean the data extracted from the Wikipedia page
+def clean_data(text: str) -> str:
+    if text.find(" ♦"):
+        text = text.split(" ♦")[0]
+    if text.find("["):
+        text = text.split("[")[0]
+    if text.find("\n"):
+        text = text.replace("\n", "")
+    return text.strip()
 
-    import pandas as pd
+
+# Extract data from the Wikipedia page
+def extract_wikipedia_data(**kwargs: Any) -> str:
 
     url = kwargs["url"]
     html = get_content_wikipedia(url)
@@ -47,19 +60,57 @@ def extract_wikipedia_page(**kwargs: Any) -> list[Any]:
             data.append(
                 {
                     "rank": i,
-                    "stadium": columns[0].text.strip(),
-                    "capacity": columns[1].text.strip(),
-                    "region": columns[2].text.strip(),
-                    "country": columns[3].text.strip(),
-                    "city": columns[4].text.strip(),
-                    "image": (
+                    "stadium": clean_data(columns[0].text),
+                    "capacity": clean_data(columns[1].text).replace(",", ""),
+                    "region": clean_data(columns[2].text),
+                    "country": clean_data(columns[3].text),
+                    "city": clean_data(columns[4].text),
+                    "image": "https://"
+                    + (
                         columns[5].find("img").get("src").split("//")[1]
                         if columns[5].find("img")
                         else "NO_IMAGE"
                     ),
-                    "home_team": columns[6].text.strip(),
+                    "home_team": clean_data(columns[6].text),
                 }
             )
-    data_df = pd.DataFrame(data)
-    data_df.to_csv("data/wikipedia_stadiums.csv", index=False, header=True)
-    return data
+    json_rows = json.dumps(data)
+    # Push the json data into xcom to communicate within the DAG tasks
+    kwargs["ti"].xcom_push(key="rows", value=json_rows)
+    return "OK"
+
+
+# Get the latitude and longitude of a country and a city
+def get_latitude_longitude(country: str, city: str) -> Optional[Tuple[float, float]]:
+    geolocator = Nominatim(user_agent="wikipedia_pipeline")
+    location = geolocator.geocode(f"{city}, {country}")
+    if location:
+        return location.latitude, location.longitude
+    return None
+
+
+# Transform the data extracted from the Wikipedia page
+def transform_wikipedia_data(**kwargs: Any) -> str:
+
+    json_rows = kwargs["ti"].xcom_pull(task_ids="extract_data_from_wikipedia", key="rows")
+    rows = json.loads(json_rows)
+
+    data_df = pd.DataFrame(rows)
+    # Change the default image if the image is not available
+    data_df["image"] = data_df["image"].apply(
+        lambda x: NO_IMAGE if x in ["NO_IMAGE", "", None] else x
+    )
+    # Get the latitude and longitude of the stadium and country
+    # city is not used due to maybe more than one stadium in a city
+    data_df["location"] = data_df.apply(
+        lambda x: get_latitude_longitude(x["country"], x["stadium"]), axis=1
+    )
+    # In case the location is duplicated, use the city to get the unique location
+    duplicate_df = data_df.duplicated(subset=["location"])
+    duplicate_df = data_df.apply(lambda x: get_latitude_longitude(x["country"], x["city"]), axis=1)
+    data_df.update(duplicate_df)
+
+    # Push the transformed data into xcom to communicate within the DAG tasks
+    kwargs["ti"].xcom_push(key="rows", value=data_df.to_json())
+
+    return "OK"
