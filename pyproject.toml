@@ -1,0 +1,39 @@
+[tool.setuptools]
+packages = ["app", "test"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "football-data-analytics"
+authors = [{name = "Rosa Pham", email = "dinhlang86@gmail.com"}]
+description = "Football Data Analytics"
+requires-python = ">=3.8"
+dynamic = ["version"]
+dependencies = [
+]
+
+[tool.black]
+line-length = 100
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | venv
+  | \.venv
+)/
+'''
+
+[tool.isort]
+# make it compatible with black
+profile = "black" 
+
+[tool.mypy]
+strict=true
+implicit_reexport=true
+exclude=[".venv"]
+
+[tool.pytest.ini_options]
+pythonpaths = ["./"]
+asyncio_mode = "auto"

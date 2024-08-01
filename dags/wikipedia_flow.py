@@ -1,0 +1,32 @@
+from datetime import datetime
+
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+
+from pipelines.wikipedia_pipeline import get_data_wikipedia
+
+dag = DAG(
+    dag_id="wikipedia_flow",
+    default_args={
+        "owner": "rosa pham",
+        "start_date": datetime(2024, 8, 1),
+    },
+    schedule_interval=None,
+    catchup=False,
+)
+
+# Extract data from Wikipedia
+wiki_data = PythonOperator(
+    task_id="extract_data",
+    python_callable=get_data_wikipedia,
+    provide_context=True,
+    op_kwargs={
+        "url": "https://en.wikipedia.org/wiki/List_of_association_football_stadiums_by_capacity",
+    },
+    dag=dag,
+)
+
+
+# Preprocess data
+
+# Load data into database
