@@ -35,7 +35,7 @@ wiki_data = PythonOperator(
 
 # Transform data extractec from Wikipedia
 transform_data = PythonOperator(
-    task_id="transform_data",
+    task_id="transform_wikipedia_data",
     python_callable=transform_wikipedia_data,
     provide_context=True,
     dag=dag,
