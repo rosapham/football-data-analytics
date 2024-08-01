@@ -100,6 +100,8 @@ def transform_wikipedia_data(**kwargs: Any) -> str:
     data_df["image"] = data_df["image"].apply(
         lambda x: NO_IMAGE if x in ["NO_IMAGE", "", None] else x
     )
+    # Change the capacity to integer
+    data_df["capacity"] = data_df["capacity"].astype(int)
     # Get the latitude and longitude of the stadium and country
     # city is not used due to maybe more than one stadium in a city
     data_df["location"] = data_df.apply(
