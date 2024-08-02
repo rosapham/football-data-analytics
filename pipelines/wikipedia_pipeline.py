@@ -1,9 +1,12 @@
 import json
+import os
+from datetime import datetime
 from typing import Any, Optional, Tuple
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from geopy.geocoders import Nominatim  # type: ignore
 
 NO_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/No-image-available.png/480px-No-image-available.png"  # noqa: E501
@@ -61,7 +64,7 @@ def extract_wikipedia_data(**kwargs: Any) -> str:
                 {
                     "rank": i,
                     "stadium": clean_data(columns[0].text),
-                    "capacity": clean_data(columns[1].text).replace(",", ""),
+                    "capacity": clean_data(columns[1].text).replace(",", "").replace(".", ""),
                     "region": clean_data(columns[2].text),
                     "country": clean_data(columns[3].text),
                     "city": clean_data(columns[4].text),
@@ -108,11 +111,35 @@ def transform_wikipedia_data(**kwargs: Any) -> str:
         lambda x: get_latitude_longitude(x["country"], x["stadium"]), axis=1
     )
     # In case the location is duplicated, use the city to get the unique location
-    duplicate_df = data_df.duplicated(subset=["location"])
-    duplicate_df = data_df.apply(lambda x: get_latitude_longitude(x["country"], x["city"]), axis=1)
+    duplicate_df = data_df[data_df.duplicated("location")]
+    duplicate_df["location"] = duplicate_df.apply(
+        lambda x: get_latitude_longitude(x["country"], x["city"]), axis=1
+    )
     data_df.update(duplicate_df)
 
     # Push the transformed data into xcom to communicate within the DAG tasks
     kwargs["ti"].xcom_push(key="rows", value=data_df.to_json())
+
+    return "OK"
+
+
+# Write transformed data into a database
+def load_wikipedia_data(**kwargs: Any) -> str:
+
+    json_rows = kwargs["ti"].xcom_pull(task_ids="transform_wikipedia_data", key="rows")
+    data = json.loads(json_rows)
+
+    # loading variables from .env file
+    load_dotenv()
+
+    # Write the data into a csv file
+    data_df = pd.DataFrame(data)
+    file_name = "wikipedia_stadiums_" + str(datetime.now().date()) + ".csv"
+    access_key = os.getenv("ACCOUNT_KEY")
+    data_df.to_csv(
+        "abfs://footballdata@footballdatasa.dfs.core.windows.net/data/" + file_name,
+        storage_options={"account_key": f"{access_key}"},
+        index=False,
+    )
 
     return "OK"

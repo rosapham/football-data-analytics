@@ -9,6 +9,7 @@ from airflow.operators.python import PythonOperator
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pipelines.wikipedia_pipeline import (  # noqa: E402
     extract_wikipedia_data,
+    load_wikipedia_data,
     transform_wikipedia_data,
 )
 
@@ -23,7 +24,7 @@ dag = DAG(
 )
 
 # Extract data from Wikipedia
-wiki_data = PythonOperator(
+extract_data = PythonOperator(
     task_id="extract_data_from_wikipedia",
     python_callable=extract_wikipedia_data,
     provide_context=True,
@@ -42,3 +43,11 @@ transform_data = PythonOperator(
 )
 
 # Load data into database
+load_data = PythonOperator(
+    task_id="load_wikipedia_data",
+    python_callable=load_wikipedia_data,
+    provide_context=True,
+    dag=dag,
+)
+
+extract_data >> transform_data >> load_data
