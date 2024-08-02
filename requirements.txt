@@ -2,3 +2,5 @@ apache-airflow
 bs4
 pandas
 geopy
+adlfs
+python-dotenv

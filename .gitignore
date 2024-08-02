@@ -4,4 +4,5 @@
 steps.md
 .vscode
 __pycache__
-data/*.csv
+logs/*
+.env

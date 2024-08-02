@@ -24,6 +24,7 @@ services:
       - ./requirements.txt:/opt/airflow/requirements.txt
       - ./data:/opt/airflow/data
       - ./pipelines:/opt/airflow/pipelines
+      - ./logs:/opt/airflow/logs
     #      - ./airflow.cfg:/opt/airflow/airflow.cfg
     #      - ./airflow.db:/opt/airflow/airflow.db
     ports:
@@ -60,6 +61,7 @@ services:
       - ./requirements.txt:/opt/airflow/requirements.txt
       - ./data:/opt/airflow/data
       - ./pipelines:/opt/airflow/pipelines
+      - ./logs:/opt/airflow/logs
     environment:
       - LOAD_EX=n
       - EXECUTOR=Sequential
